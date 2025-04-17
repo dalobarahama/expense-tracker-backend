@@ -5,10 +5,13 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/dalobarahama/expense-tracker/database"
 	"github.com/dalobarahama/expense-tracker/routes"
 )
 
 func main() {
+	database.Connect()
+
 	router := routes.SetupRoutes()
 
 	fmt.Println("✅ Server running at http://localhost:8080")
