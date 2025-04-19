@@ -1,81 +1,87 @@
 package controllers
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/dalobarahama/expense-tracker/database"
 	"github.com/dalobarahama/expense-tracker/models"
+	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
 var jwtKey = []byte("secret_key")
 
-type Credentials struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type Claims struct {
-	Username string `json:"username"`
-	jwt.RegisteredClaims
-}
-
-func Login(w http.ResponseWriter, r *http.Request) {
-	var creds Credentials
-	json.NewDecoder(r.Body).Decode(&creds)
+func Login(c *gin.Context) {
+	var input models.User
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	var user models.User
-	result := database.DB.Where("username = ?", creds.Username).First(&user)
-
-	if result.Error != nil {
-		http.Error(w, "Invalid Credentials", http.StatusUnauthorized)
+	if err := database.DB.Where("username = ?", input.Username).First(&user).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid username or password"})
 		return
 	}
 
-	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(creds.Password))
+	if !CheckPasswordHash(input.Password, user.Password) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
+		return
+	}
+
+	token, err := GenerateJWT(user.ID)
 	if err != nil {
-		http.Error(w, "Invalid Credentials", http.StatusUnauthorized)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
 
-	expirationTime := time.Now().Add(24 * time.Hour)
-	claims := &Claims{
-		Username: creds.Username,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expirationTime),
-		},
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, _ := token.SignedString(jwtKey)
-
-	http.SetCookie(w, &http.Cookie{
-		Name:    "token",
-		Value:   tokenString,
-		Expires: expirationTime,
-	})
+	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
-func Register(w http.ResponseWriter, r *http.Request) {
-	var creds Credentials
-	json.NewDecoder(r.Body).Decode(&creds)
-
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(creds.Password), bcrypt.DefaultCost)
-
-	user := models.User{
-		Username: creds.Username,
-		Password: string(hashedPassword),
-	}
-	result := database.DB.Create(&user)
-
-	if result.Error != nil {
-		http.Error(w, "Username already exists", http.StatusBadRequest)
+func Register(c *gin.Context) {
+	var input models.User
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
+	hashedPassword, err := HashPassword(input.Password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+		return
+	}
 
+	user := models.User{
+		Username: input.Username,
+		Password: hashedPassword,
+	}
+
+	if err := database.DB.Create(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Registration success!"})
+}
+
+func HashPassword(password string) (string, error) {
+	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(hashedBytes), err
+}
+
+func CheckPasswordHash(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
+}
+
+func GenerateJWT(userId uint) (string, error) {
+	claims := jwt.MapClaims{}
+	claims["authorized"] = true
+	claims["user_id"] = userId
+	claims["exp"] = time.Now().Add(time.Hour * 72).Unix()
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(jwtKey)
 }

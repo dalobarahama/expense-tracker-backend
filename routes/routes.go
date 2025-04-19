@@ -1,25 +1,23 @@
 package routes
 
 import (
-	"net/http"
-
 	controllers "github.com/dalobarahama/expense-tracker/controller"
-	"github.com/gorilla/mux"
+	"github.com/dalobarahama/expense-tracker/middlewares"
+	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes() *mux.Router {
-	router := mux.NewRouter()
+func SetupRoutes() *gin.Engine {
+	router := gin.Default()
 
-	router.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("pong"))
-	}).Methods("GET")
+	router.POST("/register", controllers.Register)
+	router.POST("/login", controllers.Login)
 
-	router.HandleFunc("/expenses", controllers.GetExpenses).Methods("GET")
-	router.HandleFunc("/expenses", controllers.CreateExpenses).Methods("POST")
-
-	router.HandleFunc("/register", controllers.Register).Methods("POST")
-	router.HandleFunc("/login", controllers.Login).Methods("POST")
+	authorized := router.Group("/")
+	authorized.Use(middlewares.AuthMiddleware())
+	{
+		authorized.GET("/expenses", controllers.GetExpenses)
+		authorized.POST("/expenses", controllers.CreateExpenses)
+	}
 
 	return router
 }

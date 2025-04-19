@@ -1,24 +1,40 @@
 package controllers
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/dalobarahama/expense-tracker/database"
 	"github.com/dalobarahama/expense-tracker/models"
+	"github.com/gin-gonic/gin"
 )
 
-func GetExpenses(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+func GetExpenses(ctx *gin.Context) {
 	var expenses []models.Expense
-	database.DB.Find(&expenses)
-	json.NewEncoder(w).Encode(expenses)
+
+	result := database.DB.Find(&expenses)
+
+	if result.Error != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, expenses)
 }
 
-func CreateExpenses(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+func CreateExpenses(ctx *gin.Context) {
 	var expense models.Expense
-	json.NewDecoder(r.Body).Decode(&expense)
-	database.DB.Create(&expense)
-	json.NewEncoder(w).Encode(expense)
+
+	if err := ctx.ShouldBindJSON(&expense); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	result := database.DB.Create(&expense)
+
+	if result.Error != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, expense)
 }
