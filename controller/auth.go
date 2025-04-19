@@ -40,6 +40,11 @@ func Login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
+func Logout(c *gin.Context) {
+	c.SetCookie("token", "", -1, "/", "", false, true)
+	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+}
+
 func Register(c *gin.Context) {
 	var input models.User
 	if err := c.ShouldBindJSON(&input); err != nil {

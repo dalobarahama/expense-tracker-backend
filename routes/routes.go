@@ -17,6 +17,7 @@ func SetupRoutes() *gin.Engine {
 	{
 		authorized.GET("/expenses", controllers.GetExpenses)
 		authorized.POST("/expenses", controllers.CreateExpenses)
+		authorized.POST("/logout", controllers.Logout)
 	}
 
 	return router
